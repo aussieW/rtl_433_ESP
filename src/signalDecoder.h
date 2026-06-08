@@ -26,6 +26,7 @@
 #ifndef rtl_433_DECODER_H
 #define rtl_433_DECODER_H
 
+#include "rtl_433_devices.h"
 #include "rtl_433_ESP.h"
 
 extern "C" {
