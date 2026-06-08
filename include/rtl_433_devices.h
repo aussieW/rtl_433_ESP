@@ -290,16 +290,13 @@
 /* Add new decoders here. */
 #else
 /**
- * Subset of devices that I have access to and have tested with
+ * Subset of devices - EezTire E618 TPMS only
+ * Added by AJW to restrict to just this decoder	
  */
 #  define DEVICES         \
-    DECL(acurite_986)     \
-    DECL(skylink_motion)  \
-    DECL(prologue)        \
-    DECL(philips_aj3650)  \
-    DECL(fineoffset_WH51) \
+    DECL(tpms_eezrv)      \
 /* Add new personal decoders here. */
-#  define NUMOFDEVICES 5
+#  define NUMOFDEVICES 1
 #endif
 
 #define DECL(name) extern r_device name;
