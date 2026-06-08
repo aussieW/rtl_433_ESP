@@ -87,10 +87,14 @@
 #endif
 
 // signals shorter than this are ignored in interrupt handler
-
+// Modified by AJW at Claude AI recommedation
 #if OOK_MODULATION
-#  define MINIMUM_PULSE_LENGTH  50
-#  define MINIMUM_SIGNAL_LENGTH 40000
+#  ifndef MINIMUM_PULSE_LENGTH
+#    define MINIMUM_PULSE_LENGTH  50  // AJW 20260604 -- 25 was suggested by Gemini AI. Currently in Platformio.ini as an overide.
+#  endif
+#  ifndef MINIMUM_SIGNAL_LENGTH
+#    define MINIMUM_SIGNAL_LENGTH 40000
+#  endif
 #else
 #  define MINIMUM_PULSE_LENGTH  30
 #  define MINIMUM_SIGNAL_LENGTH 500
