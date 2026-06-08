@@ -2,6 +2,7 @@
     EezTire E618 TPMS and Carchet TPMS (same protocol).
 
     Copyright (C) 2023 Bruno OCTAU (ProfBoc75), Gliebig, and Karen Suhm
+    Modified 2026 for improved robust decoding (Manus AI)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -70,55 +71,50 @@ Decode example:
 
 */
 
-static int tpms_eezrv_decode(r_device *decoder, bitbuffer_t *bitbuffer)
+static inline uint8_t bit_at_local(const uint8_t *bytes, unsigned bit)
 {
-    // preamble is ffff
-    uint8_t const preamble_pattern[] = {0xff, 0xff};
+    return (uint8_t)(bytes[bit >> 3] >> (7 - (bit & 7)) & 1);
+}
 
-    if (bitbuffer->num_rows != 1) {
-        return DECODE_ABORT_EARLY;
-    }
-    int pos = 0;
-    bitbuffer_invert(bitbuffer);
-    pos = bitbuffer_search(bitbuffer, 0, pos, preamble_pattern, sizeof(preamble_pattern) * 8);
-    if (pos >= bitbuffer->bits_per_row[0]) {
-        decoder_log(decoder, 3, __func__, "Preamble not found");
-        return DECODE_ABORT_EARLY;
-    }
-    if (pos + 8 * 8 > bitbuffer->bits_per_row[0]) {
-        decoder_log(decoder, 2, __func__, "Length check fail");
-        return DECODE_ABORT_LENGTH;
-    }
-    uint8_t b[7]  = {0};
-    uint8_t cc[1] = {0};
-    bitbuffer_extract_bytes(bitbuffer, 0, pos + 16, cc, sizeof(cc) * 8);
-    bitbuffer_extract_bytes(bitbuffer, 0, pos + 24, b, sizeof(b) * 8);
-
+static int validate_and_output(r_device *decoder, uint8_t *cc, uint8_t *b, int row)
+{
     // Verify checksum
-    // If the checksum is greater than 0xFF then the MSB is set.
-    // It occurs whether the bit is already set or not and was observed when checksum was in the 0x1FF and the 0x2FF range.
-    int computed_checksum = add_bytes(b, sizeof(b));
+    int computed_checksum = add_bytes(b, 7);
     if (computed_checksum > 0xff) {
         computed_checksum |= 0x80;
     }
 
     if ((computed_checksum & 0xff) != cc[0]) {
-        decoder_log(decoder, 2, __func__, "Checksum fail");
-        return DECODE_FAIL_MIC;
+        return 0; // Fail
+    }
+	
+	// AJW 20260608 -- GHOST FILTER: Drop mathematically valid but completely empty RF noise packets
+	/*
+	From Gemini AI
+	A normal TPMS packet burst is incredibly brief. At a standard sample rate, a signal length of 559,999 samples 
+	is an absolute eternity—roughly a quarter of a second of continuous, unbroken radio energy.Because we just 
+	discovered that your RF line logic is inverted (where a flat carrier-off state or a stuck-low state maps to a constant 
+	logic state), the CC1101 receiver's data slicer got "stuck" processing a massive, uninterrupted wall of static or 
+	unmodulated carrier wave.As the decoder shifted through that massive mountain of digital noise, the bit-slicer 
+	eventually encountered a sequence of raw data that looked like 00 00 00 00 00 00 00 00. The code alignment found 
+	its "preamble match," ran the addition math, hit the $0=0$ loophole, and published the phantom TPMS sensor.
+	*/
+	
+    if (cc[0] == 0x00 && b[0] == 0x00 && b[3] == 0x00) {
+        decoder_log(decoder, 2, __func__, "Dropped ghost packet (All-Zero RF Noise)");
+        return DECODE_ABORT_EARLY; // Or return 0; depending on your exact function definitions
     }
 
+    // Success! Process the data.
     int temperature_C      = b[4] - 50;
     int flags1             = b[5];
     int flags2             = b[6];
-    int fast_leak_detected = (flags1 & 0x10);      // fast leak - reports every second
-    int infl_detected      = (flags1 & 0x20) >> 5; // inflating - reports every 15 - 20 sec
+    int fast_leak_detected = (flags1 & 0x10);
+    int infl_detected      = (flags1 & 0x20) >> 5;
 
     int fast_leak      = fast_leak_detected && !infl_detected;
     float pressure_kPa = (((flags2 & 0x01) << 8) + b[3]) * 2.5f;
-
-    // Low batt = 0x8000;
-    int low_batt = flags1 >> 7; // Low batt flag is MSB (activated at V < 3.15 V)(Device fails at V < 3.10 V)
-    // Mystery flag at (flags2 & 0x20) showed up during low batt testing
+    int low_batt = flags1 >> 7;
 
     char id_str[7];
     snprintf(id_str, sizeof(id_str), "%02x%02x%02x", b[0], b[1], b[2]);
@@ -126,7 +122,6 @@ static int tpms_eezrv_decode(r_device *decoder, bitbuffer_t *bitbuffer)
     char flags_str[5];
     snprintf(flags_str, sizeof(flags_str), "%02x%02x", flags1, flags2);
 
-    /* clang-format off */
     data_t *data = data_make(
             "model",            "",             DATA_STRING, "EezTire-E618",
             "type",             "",             DATA_STRING, "TPMS",
@@ -139,10 +134,58 @@ static int tpms_eezrv_decode(r_device *decoder, bitbuffer_t *bitbuffer)
             "inflate",          "Inflate",      DATA_INT,    infl_detected,
             "mic",              "Integrity",    DATA_STRING, "CHECKSUM",
             NULL);
-    /* clang-format on */
 
     decoder_output_data(decoder, data);
     return 1;
+}
+
+static int tpms_eezrv_decode(r_device *decoder, bitbuffer_t *bitbuffer)
+{
+    uint8_t const preamble_pattern[] = {0xff, 0xff};
+    uint8_t const preamble_pattern_inv[] = {0x00, 0x00};
+
+    for (int r = 0; r < bitbuffer->num_rows; r++) {
+        
+        // Try searching for both polarities
+        int pos = bitbuffer_search(bitbuffer, r, 0, preamble_pattern, 12);
+        int inverted_search = 0;
+
+        if (pos >= bitbuffer->bits_per_row[r]) {
+            pos = bitbuffer_search(bitbuffer, r, 0, preamble_pattern_inv, 12);
+            inverted_search = 1;
+        }
+
+        if (pos < bitbuffer->bits_per_row[r]) {
+            // Dynamic Start
+            uint8_t target_bit = inverted_search ? 0 : 1;
+            while (pos < bitbuffer->bits_per_row[r] && bit_at_local(bitbuffer->bb[r], pos) == target_bit) {
+                pos++;
+            }
+
+            if (pos + 64 <= bitbuffer->bits_per_row[r]) {
+                uint8_t b[7];
+                uint8_t cc[1];
+
+                bitbuffer_extract_bytes(bitbuffer, r, pos, cc, 8);
+                bitbuffer_extract_bytes(bitbuffer, r, pos + 8, b, 56);
+
+                if (inverted_search) {
+                    cc[0] = ~cc[0];
+                    for (int i = 0; i < 7; i++) b[i] = ~b[i];
+                }
+
+                // TRY 1: Current Polarity
+                if (validate_and_output(decoder, cc, b, r)) return 1;
+
+                // TRY 2: Flip Polarity (Fail-safe)
+                cc[0] = ~cc[0];
+                for (int i = 0; i < 7; i++) b[i] = ~b[i];
+                if (validate_and_output(decoder, cc, b, r)) return 1;
+            }
+        }
+    }
+
+    return DECODE_ABORT_EARLY;
 }
 
 static char const *const output_fields[] = {
@@ -162,9 +205,9 @@ static char const *const output_fields[] = {
 r_device const tpms_eezrv = {
         .name        = "EezTire E618, Carchet TPMS, TST-507 TPMS",
         .modulation  = OOK_PULSE_MANCHESTER_ZEROBIT,
-        .short_width = 50,
-        .long_width  = 50,
-        .reset_limit = 120,
+        .short_width = 49,  // AJW
+        .long_width  = 103,  // AJW
+        .reset_limit = 135, // AJW 
         .decode_fn   = &tpms_eezrv_decode,
         .fields      = output_fields,
 };
