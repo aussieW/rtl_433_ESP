@@ -24,6 +24,7 @@
 */
 
 #include "signalDecoder.h"
+#include "../include/rtl_433_devices.h"
 
 /*----------------------------- rtl_433_ESP Internals -----------------------------*/
 
@@ -67,12 +68,16 @@ void rtlSetup() {
     logprintfLn(LOG_DEBUG, "sizeof(cfg) %d, heap %d", sizeof(cfg),
                 ESP.getFreeHeap());
 #endif
-    cfg->conversion_mode = CONVERT_SI; // Default all output to Celsius
+        cfg->conversion_mode = CONVERT_SI; // Default all output to Celsius
+#ifdef MY_DEVICES
+    cfg->num_r_devices = NUMOFDEVICES;
+#else
     if (rtl_433_ESP::ookModulation) {
-      cfg->num_r_devices = NUMOF_OOK_DEVICES;
+        cfg->num_r_devices = NUMOF_OOK_DEVICES;
     } else {
-      cfg->num_r_devices = NUMOF_FSK_DEVICES;
+        cfg->num_r_devices = NUMOF_FSK_DEVICES;
     }
+#endif
     cfg->devices = reinterpret_cast<r_device*>(calloc(cfg->num_r_devices, sizeof(r_device)));
     if (!cfg->devices)
       FATAL_CALLOC("cfg->devices");
@@ -367,7 +372,9 @@ void rtlSetup() {
     // end of fragment
 
 #else
-    memcpy(&cfg->devices[0], &lacrosse_tx141x, sizeof(r_device));
+	// Added by AJW to restrict to  single decoder
+    cfg->num_r_devices = NUMOFDEVICES;
+    memcpy(&cfg->devices[0], &tpms_eezrv, sizeof(r_device));
 #endif
 
 #ifdef RTL_FLEX
