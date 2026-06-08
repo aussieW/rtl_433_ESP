@@ -27,6 +27,9 @@
 #include "receiver.h"
 #include "signalDecoder.h"
 
+// AJW 20260604 -- Debugging info. Check interruptHandler()
+volatile uint32_t raw_interrupt_count = 0;
+
 /*----------------------------- Transceiver SPI Connections -----------------------------*/
 
 #if defined(RF_MODULE_SCK) && defined(RF_MODULE_MISO) && \
@@ -213,6 +216,112 @@ void rtl_433_ESP::initReceiver(byte inputPin, float receiveFrequency) {
 
     state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MDMCFG4, 0x07); // Bandwidth
     RADIOLIB_STATE(state, "set MDMCFG4");
+	
+	// ---- SmartRF Studio overrides for OOK 9.6kBaud 102kHz BW 433.92MHz ----
+    // Added AJW 2026-05-29
+    state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FSCTRL1, 0x06);
+    RADIOLIB_STATE(state, "set FSCTRL1");
+    state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MDMCFG4, 0x58);
+    RADIOLIB_STATE(state, "set MDMCFG4");
+    state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MDMCFG3, 0x83);
+    RADIOLIB_STATE(state, "set MDMCFG3");
+    state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MDMCFG1, 0x20);
+    RADIOLIB_STATE(state, "set MDMCFG1");
+    state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_DEVIATN, 0x40);
+    RADIOLIB_STATE(state, "set DEVIATN");
+    state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MCSM0, 0x18);
+    RADIOLIB_STATE(state, "set MCSM0");
+    state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FOCCFG, 0x16);
+    RADIOLIB_STATE(state, "set FOCCFG");
+	
+    // CHANGED: Lower maximum gain ceiling to choke out background static
+    //state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL2, 0x43);
+    //RADIOLIB_STATE(state, "set AGCCTRL2");
+    state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL2, 0xEB); 
+    RADIOLIB_STATE(state, "set AGCCTRL2 (Squelch Noise)");
+	
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL1, 0x59);
+    RADIOLIB_STATE(state, "set AGCCTRL1");
+    state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_PKTLEN, 0x00);
+    RADIOLIB_STATE(state, "set PKTLEN");
+	
+	// AJW 20260604 after conversation with Gemini AI
+	// ---- Hardware Logic Level Inversion ----
+    // Set Bit 6 (GDO0_INV / GDO2_INV) to 1 to flip the inverted OOK data stream
+    //state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_IOCFG0, 0x0D);
+    //RADIOLIB_STATE(state, "invert IOCFG0");
+    //state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_IOCFG2, 0x01, 6, 6);
+    //RADIOLIB_STATE(state, "invert IOCFG2");
+	
+	// AJW 20260607 -- Overides from Manus AI
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_IOCFG2, 0x2E);
+    RADIOLIB_STATE(state, "set IOCFG2");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_IOCFG1, 0x2E);
+    RADIOLIB_STATE(state, "set IOCFG1");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_IOCFG0, 0x30);
+    RADIOLIB_STATE(state, "set IOCFG0");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FIFOTHR, 0x07);
+    RADIOLIB_STATE(state, "set FIFOTHR");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_SYNC1, 0x12);
+    RADIOLIB_STATE(state, "set SYNC1");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_SYNC0, 0xAD);
+    RADIOLIB_STATE(state, "set SYNC0");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_PKTLEN, 0x00);
+    RADIOLIB_STATE(state, "set PKTLEN");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_PKTCTRL1, 0x04);
+    RADIOLIB_STATE(state, "set PKTCTRL1");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_PKTCTRL0, 0x32);
+    RADIOLIB_STATE(state, "set PKTCTRL0");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_ADDR, 0x00);
+    RADIOLIB_STATE(state, "set ADDR");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_CHANNR, 0x00);
+    RADIOLIB_STATE(state, "set CHANNR");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FSCTRL1, 0x06);
+    RADIOLIB_STATE(state, "set FSCTRL1");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FSCTRL0, 0x00);
+    RADIOLIB_STATE(state, "set FSCTRL0");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FREQ2, 0x10);
+    RADIOLIB_STATE(state, "set FREQ2");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FREQ1, 0xB0);
+    RADIOLIB_STATE(state, "set FREQ1");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FREQ0, 0x71);
+    RADIOLIB_STATE(state, "set FREQ0");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MDMCFG4, 0x58);
+    RADIOLIB_STATE(state, "set MDMCFG4");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MDMCFG3, 0x83);
+    RADIOLIB_STATE(state, "set MDMCFG3");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MDMCFG2, 0x30);
+    RADIOLIB_STATE(state, "set MDMCFG2");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MDMCFG1, 0x02);
+    RADIOLIB_STATE(state, "set MDMCFG1");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MDMCFG0, 0xF8);
+    RADIOLIB_STATE(state, "set MDMCFG0");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_DEVIATN, 0x40);
+    RADIOLIB_STATE(state, "set DEVIATN");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MCSM2, 0x07);
+    RADIOLIB_STATE(state, "set MCSM2");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MCSM1, 0x30);
+    RADIOLIB_STATE(state, "set MCSM1");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_MCSM0, 0x18);
+    RADIOLIB_STATE(state, "set MCSM0");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FOCCFG, 0x16);
+    RADIOLIB_STATE(state, "set FOCCFG");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_BSCFG, 0x6C);
+    RADIOLIB_STATE(state, "set BSCFG");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL2, 0x07);
+    RADIOLIB_STATE(state, "set AGCCTRL2");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL1, 0x59);
+    RADIOLIB_STATE(state, "set AGCCTRL1");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL0, 0x92);
+    RADIOLIB_STATE(state, "set AGCCTRL0");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FREND1, 0x56);
+    RADIOLIB_STATE(state, "set FREND1");
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FREND0, 0x11);
+    RADIOLIB_STATE(state, "set FREND0");
+	
+	
+    // ---- End SmartRF Studio overrides ----
+	
   } else {
     // From https://github.com/matthias-bs/BresserWeatherSensorReceiver/issues/41#issuecomment-1458166772
     // radio.begin(868.3, 17.24, 40, 270, 10, 32);
@@ -309,7 +418,21 @@ void rtl_433_ESP::initReceiver(byte inputPin, float receiveFrequency) {
   state = radio.receiveDirect();
 #else
   state = radio.receiveDirectAsync();
-#endif
+  
+  // AJW 20260604 --- As suggested by Gemini AI 
+  if (state == RADIOLIB_ERR_NONE) {
+    #ifdef DEMOD_DEBUG
+      Serial.println(F("rtl_433_ESP(6): CC1101 receiveDirect - success!"));
+    #endif
+
+    // ====== INSERT OUR OVERRIDES HERE ======
+    radio.SPIsetRegValue(RADIOLIB_CC1101_REG_IOCFG0, 0x4D); 
+    radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL1, 0x59);
+    // =======================================
+  }
+  // --- AJW --- End of Code Block ---------
+  
+  #endif
   RADIOLIB_STATE(state, "receiveDirect");
 
 #ifdef RESOURCE_DEBUG
@@ -351,6 +474,7 @@ int rtl_433_ESP::receivePulseTrain() {
  * 
  */
 void ICACHE_RAM_ATTR rtl_433_ESP::interruptHandler() {
+	raw_interrupt_count++;  // AJW 20260604 -- Debugging info
   if (!_enabledReceiver || !receiveMode) {
     _noiseCount++;
     return;
