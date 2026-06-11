@@ -312,7 +312,7 @@ void rtl_433_ESP::initReceiver(byte inputPin, float receiveFrequency) {
     RADIOLIB_STATE(state, "set AGCCTRL2");
 	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL1, 0x59);
     RADIOLIB_STATE(state, "set AGCCTRL1");
-	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL0, 0x92);
+	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_AGCCTRL0, 0x91);  //Changed from 0x92 which worked. Hoping to impprove low strength signal reception.
     RADIOLIB_STATE(state, "set AGCCTRL0");
 	state = radio.SPIsetRegValue(RADIOLIB_CC1101_REG_FREND1, 0x56);
     RADIOLIB_STATE(state, "set FREND1");
